@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MacroPulse AI - Fitness Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0B0F17',
+                        cardBg: '#161F30',
+                        accent: '#10B981', // Emerald
+                        protein: '#3B82F6', // Blue
+                        carbs: '#F59E0B',   // Amber
+                        fats: '#EC4899',    // Pink
+                        water: '#06B6D4'    // Cyan
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #0B0F17; color: #F8FAFC; font-family: 'Inter', system-ui, sans-serif; }
+        .glass { background: rgba(22, 31, 48, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.07); }
+        .progress-ring { transition: stroke-dashoffset 0.5s ease-in-out; }
+        ::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="pb-24 select-none">
+
+    <!-- Header -->
+    <header class="p-4 flex justify-between items-center sticky top-0 z-30 glass">
+        <div class="flex items-center gap-2">
+            <div class="w-9 h-9 rounded-xl bg-accent/20 flex items-center justify-center text-accent">
+                <i class="fa-solid fa-bolt text-lg"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-none">MacroPulse <span class="text-xs text-accent font-normal">AI</span></h1>
+                <p id="currentDate" class="text-xs text-slate-400 mt-0.5"></p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="exportForAI()" class="px-3 py-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-medium flex items-center gap-1.5 active:scale-95 transition">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Copiar para Gemini
+            </button>
+            <button onclick="toggleModal('settingsModal')" class="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-slate-300">
+                <i class="fa-solid fa-sliders"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto p-4 space-y-5">
+
+        <!-- Tarjeta Principal de Calorías y Macros -->
+        <section class="glass rounded-2xl p-5 shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Calorías Restantes</span>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <span id="calRemaining" class="text-4xl font-extrabold text-white">2850</span>
+                        <span class="text-xs text-slate-400">kcal</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1">Meta: <span id="calTarget">2850</span> | Consumido: <span id="calEaten" class="text-accent font-semibold">0</span></p>
+                </div>
+                <div class="w-20 h-20 rounded-full border-4 border-slate-800 flex items-center justify-center relative">
+                    <span id="calPercent" class="text-sm font-bold text-accent">0%</span>
+                </div>
+            </div>
+
+            <!-- Barras de Macros -->
+            <div class="grid grid-cols-3 gap-3 pt-3 border-t border-slate-800/80">
+                <!-- Proteína -->
+                <div class="bg-slate-900/60 p-3 rounded-xl">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-protein font-semibold">Proteína</span>
+                        <span id="protText" class="text-slate-400">0/155g</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div id="protBar" class="bg-protein h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+                <!-- Carbos -->
+                <div class="bg-slate-900/60 p-3 rounded-xl">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-carbs font-semibold">Carbos</span>
+                        <span id="carbText" class="text-slate-400">0/360g</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div id="carbBar" class="bg-carbs h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+                <!-- Grasas -->
+                <div class="bg-slate-900/60 p-3 rounded-xl">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-fats font-semibold">Grasas</span>
+                        <span id="fatText" class="text-slate-400">0/85g</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div id="fatBar" class="bg-fats h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tracker de Agua + Suplementación Rápida -->
+        <section class="glass rounded-2xl p-4">
+            <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-droplet text-water"></i>
+                    <h2 class="font-bold text-sm">Hidratación & Creatina</h2>
+                </div>
+                <span id="waterText" class="text-xs font-bold text-water">0 / 3000 ml</span>
+            </div>
+            <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden mb-3">
+                <div id="waterBar" class="bg-water h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between gap-2">
+                <button onclick="addWater(250)" class="flex-1 py-2 rounded-xl bg-water/10 border border-water/30 text-water text-xs font-semibold active:scale-95 transition">+250 ml</button>
+                <button onclick="addWater(500)" class="flex-1 py-2 rounded-xl bg-water/10 border border-water/30 text-water text-xs font-semibold active:scale-95 transition">+500 ml</button>
+                <button id="creatineBtn" onclick="toggleCreatine()" class="flex-1 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 text-xs font-semibold active:scale-95 transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-bolt"></i> Creatina 5g
+                </button>
+            </div>
+        </section>
+
+        <!-- Escáner de Comida por Foto (IA) -->
+        <section class="glass rounded-2xl p-4 space-y-3">
+            <div class="flex justify-between items-center">
+                <h2 class="font-bold text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-camera text-accent"></i> Analizar Comida con IA
+                </h2>
+                <span class="text-[10px] bg-accent/15 text-accent px-2 py-0.5 rounded-full">Gemini Vision</span>
+            </div>
+
+            <div class="flex gap-2">
+                <label class="flex-1 cursor-pointer py-3 px-4 rounded-xl bg-accent text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-accent/20 active:scale-95 transition">
+                    <i class="fa-solid fa-camera-retro text-sm"></i> Tomar / Subir Foto
+                    <input type="file" id="foodImageInput" accept="image/*" capture="environment" class="hidden" onchange="previewImage(event)">
+                </label>
+                <button onclick="toggleModal('manualModal')" class="py-3 px-4 rounded-xl bg-slate-800 text-slate-200 font-semibold text-xs flex items-center gap-1.5 active:scale-95 transition">
+                    <i class="fa-solid fa-pen"></i> Manual
+                </button>
+            </div>
+
+            <!-- Previsualización de Imagen -->
+            <div id="imagePreviewContainer" class="hidden space-y-2 pt-2">
+                <img id="imagePreview" class="w-full h-44 object-cover rounded-xl border border-slate-700">
+                <input type="text" id="foodContext" placeholder="Opcional: Ej. 200g de pollo con arroz y plátano..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white">
+                <button id="analyzeBtn" onclick="analyzeFoodWithAI()" class="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-microchip"></i> Calcular Macros de la Foto
+                </button>
+            </div>
+        </section>
+
+        <!-- Historial de Comidas del Día -->
+        <section class="space-y-2">
+            <div class="flex justify-between items-center px-1">
+                <h2 class="font-bold text-sm text-slate-300">Registro de Hoy</h2>
+                <button onclick="resetDay()" class="text-xs text-rose-400 hover:underline">Reiniciar día</button>
+            </div>
+            <div id="mealsList" class="space-y-2">
+                <!-- Se llena dinámicamente -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal de Entrada Manual -->
+    <div id="manualModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="glass w-full max-w-sm rounded-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center">
+                <h3 class="font-bold text-base">Agregar Alimento</h3>
+                <button onclick="toggleModal('manualModal')" class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <input id="mName" type="text" placeholder="Nombre (ej. Batido de Proteína + Avena)" class="w-full p-3 rounded-xl bg-slate-900 border border-slate-700">
+                <div class="grid grid-cols-2 gap-2">
+                    <input id="mCal" type="number" placeholder="Calorías (kcal)" class="p-3 rounded-xl bg-slate-900 border border-slate-700">
+                    <input id="mProt" type="number" placeholder="Proteínas (g)" class="p-3 rounded-xl bg-slate-900 border border-slate-700">
+                    <input id="mCarb" type="number" placeholder="Carbohidratos (g)" class="p-3 rounded-xl bg-slate-900 border border-slate-700">
+                    <input id="mFat" type="number" placeholder="Grasas (g)" class="p-3 rounded-xl bg-slate-900 border border-slate-700">
+                </div>
+                <button onclick="saveManualMeal()" class="w-full py-3 rounded-xl bg-accent text-slate-950 font-bold">Guardar Comida</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Ajustes / Perfil y API Key -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="glass w-full max-w-sm rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center">
+                <h3 class="font-bold text-base">Mis Datos & Objetivos</h3>
+                <button onclick="toggleModal('settingsModal')" class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="text-slate-400">Peso (kg)</label>
+                        <input id="uWeight" type="number" value="70" class="w-full p-2.5 mt-1 rounded-xl bg-slate-900 border border-slate-700">
+                    </div>
+                    <div>
+                        <label class="text-slate-400">Altura (cm)</label>
+                        <input id="uHeight" type="number" value="180" class="w-full p-2.5 mt-1 rounded-xl bg-slate-900 border border-slate-700">
+                    </div>
+                    <div>
+                        <label class="text-slate-400">Edad</label>
+                        <input id="uAge" type="number" value="16" class="w-full p-2.5 mt-1 rounded-xl bg-slate-900 border border-slate-700">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-slate-400">Objetivo Físico</label>
+                    <select id="uGoal" class="w-full p-2.5 mt-1 rounded-xl bg-slate-900 border border-slate-700">
+                        <option value="bulk" selected>Volumen Limpio + Fuerza (+350 kcal)</option>
+                        <option value="maintain">Mantenimiento / Rendimiento</option>
+                        <option value="cut">Definición (-400 kcal)</option>
+                    </select>
+                </div>
+                <div class="pt-2 border-t border-slate-800">
+                    <label class="text-indigo-400 font-semibold">Gemini API Key (Para leer fotos)</label>
+                    <input id="apiKeyInput" type="password" placeholder="Pega tu clave de Google AI Studio..." class="w-full p-2.5 mt-1 rounded-xl bg-slate-900 border border-slate-700">
+                    <p class="text-[10px] text-slate-400 mt-1">Con tu cuenta de Google AI Studio puedes generar una gratis para que la cámara analice platos al instante.</p>
+                </div>
+                <button onclick="saveSettings()" class="w-full py-3 rounded-xl bg-accent text-slate-950 font-bold">Recalcular y Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Estado inicial preconfigurado (1.80m, 70kg, 16 años, Volumen Magro + Deporte)
+        let state = JSON.parse(localStorage.getItem('macroPulseState')) || {
+            profile: { weight: 70, height: 180, age: 16, goal: 'bulk' },
+            targets: { cal: 2850, prot: 155, carb: 365, fat: 85, water: 3000 },
+            today: { cal: 0, prot: 0, carb: 0, fat: 0, water: 0, creatine: false, meals: [] },
+            apiKey: ''
+        };
+
+        let currentImageBase64 = null;
+
+        function init() {
+            document.getElementById('currentDate').innerText = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
+            document.getElementById('uWeight').value = state.profile.weight;
+            document.getElementById('uHeight').value = state.profile.height;
+            document.getElementById('uAge').value = state.profile.age;
+            document.getElementById('uGoal').value = state.profile.goal;
+            document.getElementById('apiKeyInput').value = state.apiKey || '';
+            updateUI();
+        }
+
+        function saveState() {
+            localStorage.setItem('macroPulseState', JSON.stringify(state));
+            updateUI();
+        }
+
+        function updateUI() {
+            const t = state.targets;
+            const d = state.today;
+
+            const rem = Math.max(0, t.cal - d.cal);
+            const pct = Math.min(100, Math.round((d.cal / t.cal) * 100));
+
+            document.getElementById('calRemaining').innerText = rem;
+            document.getElementById('calTarget').innerText = t.cal;
+            document.getElementById('calEaten').innerText = d.cal;
+            document.getElementById('calPercent').innerText = pct + '%';
+
+            // Barras de macros
+            document.getElementById('protText').innerText = `${d.prot}/${t.prot}g`;
+            document.getElementById('protBar').style.width = `${Math.min(100, (d.prot / t.prot) * 100)}%`;
+
+            document.getElementById('carbText').innerText = `${d.carb}/${t.carb}g`;
+            document.getElementById('carbBar').style.width = `${Math.min(100, (d.carb / t.carb) * 100)}%`;
+
+            document.getElementById('fatText').innerText = `${d.fat}/${t.fat}g`;
+            document.getElementById('fatBar').style.width = `${Math.min(100, (d.fat / t.fat) * 100)}%`;
+
+            // Agua y Creatina
+            document.getElementById('waterText').innerText = `${d.water} / ${t.water} ml`;
+            document.getElementById('waterBar').style.width = `${Math.min(100, (d.water / t.water) * 100)}%`;
+
+            const cBtn = document.getElementById('creatineBtn');
+            if (d.creatine) {
+                cBtn.className = "flex-1 py-2 rounded-xl bg-accent/20 border border-accent text-accent text-xs font-bold flex items-center justify-center gap-1";
+                cBtn.innerHTML = `<i class="fa-solid fa-check"></i> Creatina Lista`;
+            } else {
+                cBtn.className = "flex-1 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 text-xs font-semibold flex items-center justify-center gap-1";
+                cBtn.innerHTML = `<i class="fa-solid fa-bolt"></i> Creatina 5g`;
+            }
+
+            // Lista de comidas
+            const list = document.getElementById('mealsList');
+            if (d.meals.length === 0) {
+                list.innerHTML = `<div class="glass rounded-xl p-4 text-center text-xs text-slate-500">Aún no has registrado comidas hoy.</div>`;
+            } else {
+                list.innerHTML = d.meals.map((m, idx) => `
+                    <div class="glass rounded-xl p-3 flex justify-between items-center">
+                        <div>
+                            <p class="font-bold text-xs text-white">${m.name}</p>
+                            <p class="text-[11px] text-slate-400">
+                                <span class="text-protein">${m.prot}g P</span> • 
+                                <span class="text-carbs">${m.carb}g C</span> • 
+                                <span class="text-fats">${m.fat}g G</span>
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-xs text-accent">${m.cal} kcal</span>
+                            <button onclick="deleteMeal(${idx})" class="text-slate-500 hover:text-rose-400"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function addWater(amount) {
+            state.today.water += amount;
+            saveState();
+        }
+
+        function toggleCreatine() {
+            state.today.creatine = !state.today.creatine;
+            saveState();
+        }
+
+        function addMealObject(name, cal, prot, carb, fat) {
+            state.today.meals.unshift({ name, cal, prot, carb, fat, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) });
+            state.today.cal += cal;
+            state.today.prot += prot;
+            state.today.carb += carb;
+            state.today.fat += fat;
+            saveState();
+        }
+
+        function saveManualMeal() {
+            const name = document.getElementById('mName').value || 'Comida';
+            const cal = parseInt(document.getElementById('mCal').value) || 0;
+            const prot = parseInt(document.getElementById('mProt').value) || 0;
+            const carb = parseInt(document.getElementById('mCarb').value) || 0;
+            const fat = parseInt(document.getElementById('mFat').value) || 0;
+            addMealObject(name, cal, prot, carb, fat);
+            toggleModal('manualModal');
+            ['mName','mCal','mProt','mCarb','mFat'].forEach(id => document.getElementById(id).value = '');
+        }
+
+        function deleteMeal(idx) {
+            const m = state.today.meals[idx];
+            state.today.cal -= m.cal;
+            state.today.prot -= m.prot;
+            state.today.carb -= m.carb;
+            state.today.fat -= m.fat;
+            state.today.meals.splice(idx, 1);
+            saveState();
+        }
+
+        function resetDay() {
+            if (confirm('¿Reiniciar todos los registros de hoy?')) {
+                state.today = { cal: 0, prot: 0, carb: 0, fat: 0, water: 0, creatine: false, meals: [] };
+                saveState();
+            }
+        }
+
+        function saveSettings() {
+            const w = parseFloat(document.getElementById('uWeight').value) || 70;
+            const h = parseFloat(document.getElementById('uHeight').value) || 180;
+            const a = parseFloat(document.getElementById('uAge').value) || 16;
+            const goal = document.getElementById('uGoal').value;
+            state.apiKey = document.getElementById('apiKeyInput').value.trim();
+
+            // Mifflin-St Jeor + Factor Actividad Deportiva (1.6)
+            const bmr = (10 * w) + (6.25 * h) - (5 * a) + 5;
+            let tdee = Math.round(bmr * 1.6);
+            if (goal === 'bulk') tdee += 350;
+            if (goal === 'cut') tdee -= 400;
+
+            const prot = Math.round(w * 2.2);
+            const fat = Math.round(w * 1.15);
+            const carb = Math.round((tdee - (prot * 4) - (fat * 9)) / 4);
+
+            state.profile = { weight: w, height: h, age: a, goal };
+            state.targets = { cal: tdee, prot, carb, fat, water: Math.round(w * 42) };
+            saveState();
+            toggleModal('settingsModal');
+        }
+
+        // Imagen + Gemini Vision API
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('imagePreview').src = e.target.result;
+                document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                currentImageBase64 = e.target.result.split(',')[1];
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function analyzeFoodWithAI() {
+            if (!state.apiKey) {
+                alert('Abre el botón de Ajustes (arriba a la derecha) y pega tu API Key de Google AI Studio para analizar fotos automáticamente.');
+                toggleModal('settingsModal');
+                return;
+            }
+            const btn = document.getElementById('analyzeBtn');
+            const context = document.getElementById('foodContext').value;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analizando plato...`;
+            btn.disabled = true;
+
+            try {
+                const prompt = `Analiza esta foto de comida. Contexto adicional del usuario: "${context}". Devuelve ÚNICAMENTE un objeto JSON válido (sin bloques markdown) con las claves exactas: {"name": "Nombre corto del plato en español", "cal": numero_entero, "prot": numero_entero, "carb": numero_entero, "fat": numero_entero}`;
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${state.apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: prompt },
+                                { inline_data: { mime_type: "image/jpeg", data: currentImageBase64 } }
+                            ]
+                        }]
+                    })
+                });
+                const data = await response.json();
+                const rawText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+                const food = JSON.parse(rawText);
+
+                addMealObject(food.name, food.cal, food.prot, food.carb, food.fat);
+                document.getElementById('imagePreviewContainer').classList.add('hidden');
+                document.getElementById('foodContext').value = '';
+            } catch (err) {
+                alert('Error al analizar la imagen. Verifica tu API Key o conexión.');
+            } finally {
+                btn.innerHTML = `<i class="fa-solid fa-microchip"></i> Calcular Macros de la Foto`;
+                btn.disabled = false;
+            }
+        }
+
+        // Exportar resumen estructurado para pegar en el chat de Gemini
+        function exportForAI() {
+            const d = state.today;
+            const t = state.targets;
+            const p = state.profile;
+            const mealsText = d.meals.map(m => `- ${m.name}: ${m.cal} kcal (${m.prot}g P, ${m.carb}g C, ${m.fat}g G)`).join('\n') || '- Sin registros aún';
+            
+            const report = `📊 REPORTE NUTRICIONAL DEL DÍA (${new Date().toLocaleDateString('es-ES')})
+• Perfil: ${p.weight}kg | ${p.height}cm | Objetivo: ${p.goal.toUpperCase()}
+• Calorías: ${d.cal} / ${t.cal} kcal
+• Proteínas: ${d.prot} / ${t.prot} g
+• Carbohidratos: ${d.carb} / ${t.carb} g
+• Grasas: ${d.fat} / ${t.fat} g
+• Agua: ${d.water} / ${t.water} ml | Creatina 5g: ${d.creatine ? 'Sí ✅' : 'No ❌'}
+• Comidas:
+${mealsText}
+
+Analiza mi día y dime qué debería comer en mi próxima comida para cuadrar mis macros.`;
+
+            navigator.clipboard.writeText(report);
+            alert('✅ Reporte copiado al portapapeles. ¡Solo pégalo en nuestro chat de Gemini!');
+        }
+
+        function toggleModal(id) {
+            document.getElementById(id).classList.toggle('hidden');
+        }
+
+        init();
+    </script>
+</body>
+</html>

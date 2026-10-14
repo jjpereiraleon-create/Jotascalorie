@@ -576,6 +576,50 @@
             reader.readAsDataURL(file);
         }
 
+       // 1. Nueva función con compresión de imagen automática
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // Magia de compresión: reducimos la foto a un tamaño perfecto para la API
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 800; 
+                    let width = img.width;
+                    let height = img.height;
+
+                    // Mantener la proporción
+                    if (width > height && width > MAX_SIZE) {
+                        height *= MAX_SIZE / width;
+                        width = MAX_SIZE;
+                    } else if (height > MAX_SIZE) {
+                        width *= MAX_SIZE / height;
+                        height = MAX_SIZE;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convertimos a JPEG con 75% de calidad (pesará poquísimo)
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
+
+                    document.getElementById('imagePreview').src = compressedDataUrl;
+                    document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                    
+                    // Guardamos la versión ligera para enviarla a Gemini
+                    currentImageBase64 = compressedDataUrl.split(',')[1];
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 2. Nueva función de conexión reforzada y modelo estable
         async function analyzeFoodWithAI() {
             if (!state.apiKey) {
                 alert('Abre Ajustes (⚙️) y pega tu API Key de Google AI Studio.');
@@ -588,8 +632,10 @@
             btn.disabled = true;
 
             try {
-                const prompt = `Analiza esta comida. Contexto: "${context}". Devuelve ÚNICAMENTE un JSON con: {"name": "Nombre corto", "cal": numero_entero, "prot": numero_entero, "carb": numero_entero, "fat": numero_entero}`;
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${state.apiKey}`, {
+                const prompt = `Analiza esta comida. Contexto: "${context}". Devuelve ÚNICAMENTE un JSON válido con: {"name": "Nombre corto", "cal": numero_entero, "prot": numero_entero, "carb": numero_entero, "fat": numero_entero}`;
+                
+                // Usamos gemini-1.5-flash que es el más rápido y estable en la web
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -601,6 +647,9 @@
                         }]
                     })
                 });
+                
+                if (!response.ok) throw new Error("Error de conexión con Google AI");
+                
                 const data = await response.json();
                 const rawText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
                 const food = JSON.parse(rawText);
@@ -609,7 +658,8 @@
                 document.getElementById('imagePreviewContainer').classList.add('hidden');
                 document.getElementById('foodContext').value = '';
             } catch (err) {
-                alert('Error al analizar la imagen. Verifica tu conexión o API key.');
+                console.error(err);
+                alert('Error al procesar. Verifica tu API Key o intenta con otra foto más iluminada.');
             } finally {
                 btn.innerHTML = `<i class="fa-solid fa-microchip"></i> Calcular Macros`;
                 btn.disabled = false;
